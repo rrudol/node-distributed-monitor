@@ -1,0 +1,10 @@
+{
+  "name": "node-distributed-monitor",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "uniqid": "^4.1.1",
+    "zeromq": "^4.6.0"
+  }
+}
