@@ -16,8 +16,6 @@ class ProducerConsumerMonitor extends Monitor {
     if(this.buffer.n === 1) this.signal('empty storage');
   }
   async consume(sth) {
-    // console.log('buffer --', n--);
-    // this.signal('full storage');
     while(this.buffer.n === 0) await this.wait('empty storage');
     this.buffer.n -= 1;
     n++;

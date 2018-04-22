@@ -1,6 +1,8 @@
 const uniqid = require('uniqid');
 const {Publisher, Subscriber} = require('./ZeroMQ');
 
+let debug = 0;
+
 // Utility function, which replace all object methods new one
 function overrideMethods(obj, newMethod) {
   for (const name of Object.getOwnPropertyNames(Object.getPrototypeOf(obj))) {
@@ -33,6 +35,7 @@ class Monitor {
     this._locks = [];
     this.buffer = { _version: 0 };
     this.name = '';
+    this._requestCounter = 0;
 
     // Initialize ZeroMQ Subscriber
     new Subscriber(peers, ['peer', 'ask for critical section', `cs ${this._id}`, 'signal'], this.onMessage.bind(this));
@@ -41,14 +44,16 @@ class Monitor {
 
     // Force to run `enterCriticalSection` method before and `leaveCriticalSection` after child object method
     overrideMethods(this, function (method, ...args){
-      this.enterCriticalSection()
+      this.lock()
         .then( method.bind(this, ...args) )
-        .then( this.leaveCriticalSection.bind(this) )
+        // .then( this.leaveCriticalSection.bind(this) )
     });
   }
   // Utility method for debugging
-  log(comment) {
-    console.log(`${this._id}: ${comment}`);
+  log(comment, debugging) {
+    if(!debugging) {
+      console.log(`${this._id}: ${comment}`);
+    }
   }
   // Broadcast message to all peers
   broadcast(topic, message) {
@@ -61,14 +66,10 @@ class Monitor {
     topic = topic.toString('utf8');
     message = JSON.parse(message.toString('utf8'));
 
-    // this.log(`RECEIVED ${topic}: ${JSON.stringify(message)}`)
-
     if (topic === 'ask for critical section') {
-      //if (message.peerId === this._id) return;
       const request = this._requests[0];
       if (request && (request.timestamp < message.timestamp)
         || request && ((request.timestamp === message.timestamp) && (hashCode(request.id) > hashCode(message.id)))) {
-        // this.log(`queue ${JSON.stringify(this._requests[0].queue)}`);
         request.queue.push(message);
       } else {
         this.allow(message);
@@ -80,45 +81,38 @@ class Monitor {
       }
       request.conformationNeeded -= 1;
       if (request.conformationNeeded === 0) {
-        (async () => {
-          const buf = JSON.stringify(this.buffer);
-          await request.resolve();
+        const buf = JSON.stringify(this.buffer);
+        this.log(`I'm in! ${JSON.stringify(request)}`, true);
+        debug++;
+        if(debug>2) {
+          console.log(JSON.stringify(this._requests, null, 2));
+          console.log(JSON.stringify(this._locks, null, 2));
+          console.log(JSON.stringify(this.buffer, null, 2));
+        }
+        request.resolve().then( () => {
           if( JSON.stringify(this.buffer) !== buf ) {
             this.buffer._version += 1;
           }
-          // this.buffer._version += 1;
-          // this.log('budzimy sie');
-          this._requests = this._requests.filter(request => request.id !== message.id);
-          request.queue.forEach(message => this.allow(message));
-        })();
+          this.unlock(message.id);
+        });
       }
     } else if (topic === 'signal') {
-      this._locks.forEach(lock => {
-        if(lock.conditionalVariable === message.conditionalVariable) {
-          this.lock(lock.resolve);
-        }
-      });
+      const lock = this._locks.filter(lock => lock.conditionalVariable === message.conditionalVariable)[0];
+      if(lock) {
+        // this.log(JSON.stringify(this._locks));
+        lock.conditionalVariable = 'delete';
+        this._locks = this._locks.filter(lock => lock.conditionalVariable !== 'delete');
+        // this.log(JSON.stringify(this._locks));
+        this.lock(lock.resolve);
+      }
     } else {
       this.log(`Received unhandled message '${topic}: ${JSON.stringify(message)}'`)
     }
   }
-  enterCriticalSection() {
-    this.log('entering critical section');
-    return this.lock();
-  }
-  leaveCriticalSection() {
-    this.log('leaving critical section');
-    // this.log(JSON.stringify(this.buffer));
-    return new Promise((resolve, reject) => {
-      // setTimeout(() => {
-        resolve()
-      // }, 1000);
-    });
-  }
   wait(conditionalVariable) {
-    this.log(`waiting ${this.name} ${JSON.stringify(this.buffer)}`);
+    this.log(`waiting ${this.name} ${JSON.stringify(this.buffer)}`, true);
     return new Promise((resolve, reject) => {
-      const lock = { conditionalVariable, resolve, reject };
+      const lock = { conditionalVariable, resolve: () => { /*this.log(`wait resolved ${this.name} ${JSON.stringify(this.buffer)}`); */resolve(); }, reject };
       this._locks.push(lock);
     });
   }
@@ -128,9 +122,10 @@ class Monitor {
   lock(r) {
     return new Promise((resolve, reject) => {
       const criticalSectionRequest = {
-        id: this._id + uniqid(),
+        id: this._id + this._requestCounter++,
         peerId: this._id,
         queue: [],
+        timestamp: +(new Date),
         // Need conformation from each peer
         conformationNeeded: this._peers.length,
         resolve: async () => { if(r) await r(); await resolve(); },
@@ -139,6 +134,13 @@ class Monitor {
       this._requests.push(criticalSectionRequest);
       this.broadcast('ask for critical section', criticalSectionRequest);
     });
+  }
+  unlock(requestId) {
+    this.log(`I'm out!`, true);
+    debug--;
+    const request = this._requests.filter(request => request.id === requestId)[0];
+    this._requests = this._requests.filter(request => request.id !== requestId);
+    request.queue.forEach(message => this.allow(message));
   }
   allow(message) {
     this.broadcast(`cs ${message.peerId}`, { id: message.id, buffer: this.buffer });

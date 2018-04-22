@@ -14,22 +14,29 @@ const monitor = new ProducerConsumerMonitor({
 
 monitor.name = process.argv[3] % 2 ? 'producer' : 'consumer';
 
-async function start() {
-  let i;
-  for(i=0;i<100;i++) {
-    await new Promise( (resolve, reject) => {
-      setTimeout(() => {
-        if(process.argv[3] % 2) {
-          monitor.produce('a').then( () => resolve() );
-        } else {
-          monitor.consume('a').then( () => resolve() );
-        }
-      }, Math.random() * 2000 + 1000)
-    });
-  }
-}
+setTimeout(() => {
 
-start();
+  async function start() {
+    let i;
+    for (i = 0; i < 10; i++) {
+      await new Promise((resolve, reject) => {
+        setTimeout(() => {
+          if (process.argv[3] % 2) {
+            monitor.produce('a').then(() => resolve());
+          } else {
+            monitor.consume('a').then(() => resolve());
+          }
+        }, Math.random() * 500 + 600)
+      });
+    }
+    setTimeout(() => {
+      console.log('done', monitor.buffer)
+    }, 2000);
+  }
+  start();
+
+}, 10000);
+
 
 
 // Array(6).fill().forEach( (e, i) => {
