@@ -6,8 +6,8 @@ function overrideMethods(obj, newMethod) {
   for (const name of Object.getOwnPropertyNames(Object.getPrototypeOf(obj))) {
     const method = obj[name];
     if(name === 'constructor') continue;
-    obj[name] = ((...args) => {
-      newMethod.call(obj, method, ...args);
+    obj[name] = ( async (...args) => {
+      await newMethod.call(obj, method, ...args);
     });
   }
 }
@@ -32,6 +32,7 @@ class Monitor {
     this._requests = [];
     this._locks = [];
     this.buffer = { _version: 0 };
+    this.name = '';
 
     // Initialize ZeroMQ Subscriber
     new Subscriber(peers, ['peer', 'ask for critical section', `cs ${this._id}`, 'signal'], this.onMessage.bind(this));
@@ -51,6 +52,7 @@ class Monitor {
   }
   // Broadcast message to all peers
   broadcast(topic, message) {
+    // this.log(`SEND ${topic}: ${JSON.stringify(message)}`)
     this._publisher.broadcast(topic, message);
   }
   // Handle received message
@@ -58,6 +60,8 @@ class Monitor {
     // Decode received message
     topic = topic.toString('utf8');
     message = JSON.parse(message.toString('utf8'));
+
+    // this.log(`RECEIVED ${topic}: ${JSON.stringify(message)}`)
 
     if (topic === 'ask for critical section') {
       //if (message.peerId === this._id) return;
@@ -112,7 +116,7 @@ class Monitor {
     });
   }
   wait(conditionalVariable) {
-    this.log('waiting');
+    this.log(`waiting ${this.name} ${JSON.stringify(this.buffer)}`);
     return new Promise((resolve, reject) => {
       const lock = { conditionalVariable, resolve, reject };
       this._locks.push(lock);

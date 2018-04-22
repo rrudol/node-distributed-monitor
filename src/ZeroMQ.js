@@ -3,7 +3,6 @@ const zmq = require('zeromq')
 class Publisher {
   constructor(address = 'tcp://127.0.0.1:9312') {
     this.sock = zmq.socket('pub');
-    console.log(address)
     this.sock.bindSync(address);
   }
   broadcast(topic, message) {
