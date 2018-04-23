@@ -38,12 +38,22 @@ class Monitor {
     this._requestCounter = 0;
 
     // Initialize ZeroMQ Subscriber
-    new Subscriber(peers, ['peer', 'ask for critical section', `cs ${this._id}`, 'signal'], this.onMessage.bind(this));
+    this._subscriber = new Subscriber(peers, ['peer', 'ask for critical section', `cs ${this._id}`, 'signal'], this.onMessage.bind(this));
+
+    // while(this._subscriber.subscriptions.size !== peers.length - 1){ if(this._subscriber.subscriptions.size !== 0) this.log( this._subscriber.subscriptions.size ) }
+
     // Initialize ZeroMQ Publisher
     this._publisher = new Publisher(`tcp://${ip}:${port}`);
 
+    this._missing = [];
     // Force to run `enterCriticalSection` method before and `leaveCriticalSection` after child object method
-    overrideMethods(this, function (method, ...args){
+    overrideMethods(this, async function (method, ...args){
+      if(this._subscriber.subscriptions.size !== peers.length) {
+        await new Promise( (resolve, reject) => {
+          this._missing.push( resolve );
+        });
+      }
+
       this.lock()
         .then( method.bind(this, ...args) )
         // .then( this.leaveCriticalSection.bind(this) )
@@ -73,6 +83,14 @@ class Monitor {
     topic = topic.toString('utf8');
     message = JSON.parse(message.toString('utf8'));
 
+    if(this._subscriber.subscriptions.size === this._peers.length) {
+      this._missing.forEach(resolve => resolve());
+    }
+
+    if(message.buffer && (this.buffer._version < message.buffer._version) ) {
+      this.buffer = message.buffer;
+    }
+
     if (topic === 'ask for critical section') {
       const request = this._requests[0];
       if (request && (request.timestamp < message.timestamp)
@@ -83,9 +101,6 @@ class Monitor {
       }
     } else if (topic === `cs ${this._id}`) {
       const request = this._requests.filter(request => request.id === message.id)[0];
-      if(this.buffer._version < message.buffer._version) {
-        this.buffer = message.buffer;
-      }
       request.conformationNeeded -= 1;
       if (request.conformationNeeded === 0) {
         const buf = JSON.stringify(this.buffer);
@@ -117,7 +132,7 @@ class Monitor {
     }
   }
   wait(conditionalVariable) {
-    this.log(`waiting ${this.name} ${JSON.stringify(this.buffer)}`, true);
+    this.log(`waiting ${this.name} ${JSON.stringify(this.buffer)}`, false);
     return new Promise((resolve, reject) => {
       const lock = { conditionalVariable, resolve: () => { /*this.log(`wait resolved ${this.name} ${JSON.stringify(this.buffer)}`); */resolve(); }, reject };
       this._locks.push(lock);
@@ -139,7 +154,7 @@ class Monitor {
         reject
       };
       this._requests.push(criticalSectionRequest);
-      this.broadcast('ask for critical section', criticalSectionRequest);
+      this.broadcast('ask for critical section', { ...criticalSectionRequest, buffer: this.buffer } );
     });
   }
   unlock(requestId) {
