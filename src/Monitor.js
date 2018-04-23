@@ -48,6 +48,13 @@ class Monitor {
         .then( method.bind(this, ...args) )
         // .then( this.leaveCriticalSection.bind(this) )
     });
+
+    setInterval( () => {
+      const now = +(new Date);
+      this._requests.filter( request => now > request.timestamp + 4000 )
+        .forEach( request => request.reject() );
+      this._requests = this._requests.filter( request => now <= request.timestamp + 4000 );
+    }, 2000 );
   }
   // Utility method for debugging
   log(comment, debugging) {
