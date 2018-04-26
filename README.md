@@ -27,7 +27,7 @@ npm install
 ```
 Create child class of [Monitor.js](https://github.com/rrudol/node-distributed-monitor/blob/master/src/Monitor.js).
 For example:
-```
+```js
 const Monitor = require('./Monitor');
 
 class ProducerConsumerMonitor extends Monitor {
@@ -54,7 +54,7 @@ class ProducerConsumerMonitor extends Monitor {
 module.exports = ProducerConsumerMonitor;
 ```
 Create starting script:
-```
+```js
 const ProducerConsumerMonitor = require('./src/ProducerConsumerMonitor');
 
 const monitor = new ProducerConsumerMonitor({
