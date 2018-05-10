@@ -83,15 +83,18 @@ class Monitor {
     topic = topic.toString('utf8');
     message = JSON.parse(message.toString('utf8'));
 
+    // Schedule messages sent before synchronization
     if(this._subscriber.subscriptions.size === this._peers.length) {
       this._missing.forEach(resolve => resolve());
     }
 
+    // Update buffer if received newer
     if(message.buffer && (this.buffer._version < message.buffer._version) ) {
       this.buffer = message.buffer;
     }
 
     if (topic === 'ask for critical section') {
+      // If received request of critical section
       const request = this._requests[0];
       if (request && (request.timestamp < message.timestamp)
         || request && ((request.timestamp === message.timestamp) && (hashCode(request.id) > hashCode(message.id)))) {
@@ -100,6 +103,7 @@ class Monitor {
         this.allow(message);
       }
     } else if (topic === `cs ${this._id}`) {
+      // If received conformation 
       const request = this._requests.filter(request => request.id === message.id)[0];
       request.conformationNeeded -= 1;
       if (request.conformationNeeded === 0) {
@@ -119,19 +123,20 @@ class Monitor {
         });
       }
     } else if (topic === 'signal') {
+      // If received signal
       const lock = this._locks.filter(lock => lock.conditionalVariable === message.conditionalVariable)[0];
       if(lock) {
-        // this.log(JSON.stringify(this._locks));
         lock.conditionalVariable = 'delete';
         this._locks = this._locks.filter(lock => lock.conditionalVariable !== 'delete');
-        // this.log(JSON.stringify(this._locks));
         this.lock(lock.resolve);
       }
     } else {
+      // If received unhandled message
       this.log(`Received unhandled message '${topic}: ${JSON.stringify(message)}'`)
     }
   }
   wait(conditionalVariable) {
+    // Waiting for being notified
     this.log(`waiting ${this.name} ${JSON.stringify(this.buffer)}`, false);
     return new Promise((resolve, reject) => {
       const lock = { conditionalVariable, resolve: () => { /*this.log(`wait resolved ${this.name} ${JSON.stringify(this.buffer)}`); */resolve(); }, reject };
@@ -139,10 +144,12 @@ class Monitor {
     });
   }
   signal(conditionalVariable) {
+    // Notify all waiting clients
     this.broadcast('signal', {conditionalVariable});
   }
   lock(r) {
     return new Promise((resolve, reject) => {
+      // Broadcast request 
       const criticalSectionRequest = {
         id: this._id + this._requestCounter++,
         peerId: this._id,
@@ -160,11 +167,14 @@ class Monitor {
   unlock(requestId) {
     this.log(`I'm out!`, true);
     debug--;
+    // Take queue of executed request
     const request = this._requests.filter(request => request.id === requestId)[0];
     this._requests = this._requests.filter(request => request.id !== requestId);
+    // Send conformation to all 
     request.queue.forEach(message => this.allow(message));
   }
   allow(message) {
+    // Send conformation to message.peerId
     this.broadcast(`cs ${message.peerId}`, { id: message.id, buffer: this.buffer });
   }
 }
