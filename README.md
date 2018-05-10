@@ -20,6 +20,17 @@ Created as a project for Tools of Distributed Systems classes at [Poznań Univer
 - Node.js 8.11.1 or higher
 - Windows Build Tools - Can be installed with `npm install -g windows-build-tools`
 
+#### Ubuntu 16.04 - Node installation
+```
+cd ~
+curl -sL https://deb.nodesource.com/setup_8.x -o nodesource_setup.sh
+sudo bash nodesource_setup.sh
+sudo apt-get install nodejs -y
+nodejs -v
+git clone https://github.com/rrudol/node-distributed-monitor.git
+cd node-distributed-monitor
+```
+
 ## Usage
 Before first launch install dependencies via `npm` or `yarn`
 ```
@@ -86,6 +97,11 @@ async function start() {
 }
 start();
 ```
+### Starting
+```
+node index.js {ip} {port}
+```
+
 ## Development
 To run concurrently many process on single device, add script into package.json like this:
 ```
