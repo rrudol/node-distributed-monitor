@@ -2,7 +2,11 @@
 
 ## Description
 Implementation of Distributed Monitor in Node.js. Communication layer is using [ZeroMQ.node](https://github.com/zeromq/zeromq.js/).
+
+### How it works
 `Monitor` child classes have all methods wrapped into critical section and share `buffer` field, which could contain any type of field, but have to be stringified into JSON. Each process open socket as a publisher and subscriber, then they listen to each other. There are three types of messages. First is request for critical section, which is broadcast to all process. Every of them send second type of message if it doesn't need access to critical section. In other case, timestamps of their request are compared. Process which send request later, is saved into queue of faster process and give it permission. After collecting permissions from all processes, critical section access is granted. After leaving critical section, process send permissions to all saved in queue. Message with permission contains also buffer version number and if is newer than receiver has, overrides it. That's how processes share buffer object. During processing in critical section process could be stopped by `wait` method. That method required string which could be called conditional variable. Stopped process is waiting for third type of message, which could be send by other process invoking `signal` method, which has same parameter string as `wait` those.
+
+### Summary
 This project was especially interesting because of single thread and asynchronous nature of JavaScript. It is probably the only one public implementation of distributed monitor written in Node.js. The only way to stop processing in the middle of critical section was using async/await statement and probably many bad JavaScript programming practices like collecting promise resolvers. Because of C++ bindings of ZeroMQ.node, this project can't be run directly in browsers, but ZeroMQ could be replaces by WebSocket technology, which could make it even more powerful.  
 Created as a project for Tools of Distributed Systems classes at [Poznań University of Technology](https://put.poznan.pl)
 
